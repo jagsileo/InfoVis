@@ -1,0 +1,540 @@
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <title>Sankey</title>
+        <style>
+            .node rect {
+                cursor: move;
+                fill-opacity: .9;
+                shape-rendering: crispEdges;
+            }
+            .node text {
+                pointer-events: none;
+                text-shadow: 0 1px 0 #fff;
+            }
+            .link {
+                fill: none;
+                stroke: #000;
+                stroke-opacity: .2;
+            }
+            .link:hover {
+                stroke-opacity: .5;
+            }
+    table {
+    border-collapse: collapse;
+    cellspacing:"9";
+    width:95%;
+    
+}
+
+
+  
+   td {
+         text-align: left;
+         padding: 0.3rem;
+}
+
+        </style>
+    </head>
+    <body>
+        <form id="Form1" action="/BusinessLogic/Consolidated_ethinicity_v6.php" method="post">
+            <select name="cohort" id="cohort">
+                <option>Select Cohort</option>
+                <option value="ALL">Cohorts</option>
+                <option value="2001">2001</option>
+                <option value="2002">2002</option>
+                <option value="2003">2003</option>
+                <option value="2004">2004</option>
+                <option value="2005">2005</option>
+            </select>
+            <select name="major" id="major">
+                <option value="ALL">College</option>
+                <option value="ALS">Architecture and Life Sciences</option>
+                <option value="ENG">College of Engineering</option>
+                <option value="SCI">College of Science</option>
+                <option value="BIZ">College of Business</option>
+                <option value="IC">InterCollege</option>
+                <option value="LAHS">College of Liberal Arts and Human Sciences</option>
+                <option value="VET">College of Veternary Medicine</option>
+                <option value="NRE">College of Natural Resources and Environment</option>
+            </select>
+            <select  name="gender" id="gender"  >
+               <!-- <optgroup label="Gender" data-max-options="1"> -->
+                    <option value=''>Gender</option>
+                    <option value='M'>Male</option>
+                    <option value='F'>Female</option>
+            </select>
+            <select  name="ethn" id="ethn"  >
+                    <option value=''>Ethnicity</option>
+                    <option value='Hispanics of any race'>Hispanic</option>
+                    <option value='Asian'>Asian</option>
+                    <option value='Black or Afro American'>Black or Afro American</option>
+                    <option value='Native Hawaiian'>Native Hawaiian</option>
+                    <option value='White'>White</option>
+                </select>
+            <select  name="state" id="state" >
+                <option value=''>State</option>
+                    <option value = 'I'>In-State</option>
+                    <option value = 'O'>Out-of-State</option>               
+            </select>
+            Filter value: <input type="text" name="fvalue" id = "fvalue">
+            <input type="checkbox" id="transfer">Transfers 
+        </form>
+
+        <p id="chart">
+            <script src='http://d3js.org/d3.v3.min.js'></script>
+            <script src="sankey.js"></script>
+            <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7/jquery.js"></script>
+            <script src="http://malsup.github.com/jquery.form.js"></script> 
+            <script>
+                //var dataset = <?php echo json_encode($data); ?>;
+                //console.log(dataset);
+                var check = "original";
+                var cohort = "ALL";
+                var fval = "";
+                $(document).ready(function () {
+
+                    $("#cohort").change(function () {
+                        d3.select("svg").remove();
+                        cohort = $("#cohort option:selected").val();
+                        console.log(cohort);
+                        prepare();
+                        $("#Form1").submit();
+                    });
+                    $("#major").change(function () {
+                        d3.select("svg").remove();
+                        if($("#major option:selected").val() != "ALL"){
+                            document.getElementById("legend").style.display = "none";
+                        }
+                        else
+                        {
+                            document.getElementById("legend").style.display = "";
+                        }
+                        prepare();
+                        $("#Form1").submit();
+                    });
+                    $("#gender").change(function () {
+                        d3.select("svg").remove();
+                        prepare();
+                        $("#Form1").submit();
+                    });
+                    $("#ethn").change(function () {
+                        d3.select("svg").remove();
+                        prepare();
+                        $("#Form1").submit();
+                    });
+                    $("#state").change(function () {
+                        d3.select("svg").remove();
+                        prepare();
+                        $("#Form1").submit();
+                    });
+                    $("#transfer").on("click", function () {
+                        if (this.checked) {
+                            //Do stuff
+                            check = "transfer";
+                            console.log(check);
+                            d3.select("svg").remove();
+                            prepare();
+                            $("#Form1").submit();
+                        }
+                        else {
+                            check = "original";
+                            console.log(check);
+                            d3.select("svg").remove();
+                            prepare();
+                            $("#Form1").submit();
+                        }
+                    });
+                    $("#fvalue").change(function() {
+                        d3.select("svg").remove();
+                        prepare();
+                        fval = document.getElementById("fvalue").value;
+                    });
+                    $('#Form1').ajaxForm({
+                        dataType: 'json',
+                        success: processJson
+                    });
+                });
+                prepare();
+                var units, margin, formatNumber, svg, sankey, path;
+                function prepare() {
+                    units = "Students";
+
+                    margin = {top: 10, right: 10, bottom: 10, left: 10},
+                    width = 1300 - margin.left - margin.right,
+                            height = 800 - margin.top - margin.bottom;
+                    // width = 3000;
+                    // height =1500;
+
+                    formatNumber = d3.format(",.0f"), // zero decimal places
+                            format = function (d) {
+                                return formatNumber(d) + " " + units;
+                            },
+                            color = d3.scale.category20();
+
+// append the svg canvas to the page
+                    // svg.selectAll("*").remove();
+                    svg = d3.select("#chart").append("svg") //.append("svg")
+                            .attr("width", width + margin.left + margin.right)
+                            .attr("height", height + margin.top + margin.bottom)
+                            .append("g")
+                            .attr("transform",
+                                    "translate(" + margin.left + "," + margin.top + ")");
+
+// Set the sankey diagram properties
+                    sankey = d3.sankey()
+                            .nodeWidth(18)
+                            .nodePadding(30)
+                            .size([width, height]);
+
+                    path = sankey.link();
+                }
+// load the data
+//d3.json("data/sankey-formatted.json", function(error, graph) {
+                //  d3.csv("Cohort2002_Coll_View.csv", function (error, data) {
+
+                //       d3.json("major_view_eng.php", function (error, data) {
+                // console.log(data);
+                function processJson(data) {
+                   // alert("Hello");
+                    var opacityflag = 0.1;
+                    var cohortyear = ["2001","2002","2003","2004","2005"];
+                    var cohortindex = 0;
+                    var cohortid = new Array(5);
+                    var cohortidindex = 0;
+
+                   // console.log(data);
+                    graph = {"nodes": [], "links": [], "labels": []};
+                    data.forEach(function (d) {
+                        if (check === "original") {
+                            graph.nodes.push({"name": d.source});
+                            graph.nodes.push({"name": d.target});
+                            graph.links.push({"source": d.source,
+                                "target": d.target,
+                                "value": +d.value});
+                        }
+                        else {
+                            var sindex = d.source.indexOf("_");
+                            var tindex = d.target.indexOf("_");
+                            var sname = d.source.substring(0, sindex);
+                            var tname = d.target.substring(0, tindex);
+                            if (sname !== tname) {
+                                graph.nodes.push({"name": d.source});
+                                graph.nodes.push({"name": d.target});
+                                graph.links.push({"source": d.source,
+                                    "target": d.target,
+                                    "value": +d.value});
+                            }
+                        }
+                    });
+
+
+                    // return only the distinct / unique nodes
+                    graph.nodes = d3.keys(d3.nest()
+                            .key(function (d) {
+                                return d.name;
+                            })
+                            .map(graph.nodes));
+                    // loop through each link replacing the text with its index from node
+                    graph.links.forEach(function (d, i) {
+                        graph.links[i].source = graph.nodes.indexOf(graph.links[i].source);
+                        graph.links[i].target = graph.nodes.indexOf(graph.links[i].target);
+                       
+                    });
+                    //now loop through each nodes to make nodes an array of objects
+                    // rather than an array of strings
+                    graph.nodes.forEach(function (d, i) {
+                        graph.nodes[i] = {"name": d};
+                       /* if (graph.nodes[i].name === "GRAD_F3") {
+                            graph.nodes[i].xpos = 531.6363636363636;
+                            console.log(graph.nodes[i].name);
+                            console.log(graph.nodes[i].xpos);
+                        }*/
+                    });
+                    console.log(graph.links);
+                    sankey
+                            .nodes(graph.nodes)
+                            .links(graph.links)
+                            .layout(32);
+                    console.log(graph.links);
+// add in the links  
+                    /*   graph.nodes.forEach(function (d, i) {
+                     if(graph.nodes[i].x === 0){
+                     console.log(graph.nodes[i].x);
+                     graph.nodes[i].x = 531.6363636363636;
+                     console.log(graph.nodes[i].name);
+                     console.log(graph.nodes[i].x);
+                     }
+                     }); */
+                     
+                    var filteredlinks = graph.links.filter(function(d){
+                        if(fval == ""){
+                            return true;
+                        }
+                        return d.value > fval;
+                    })
+
+
+                    var link = svg.append("g").selectAll(".link")
+                            .data(filteredlinks)
+                            .enter().append("path")
+                            .attr("class", "link")
+                            .attr("d", path)
+                            .attr("id", function(d,i){
+                               d.id = i;
+                               return "link-"+i;
+                            })
+                            .style("stroke-width", function (d) {
+                                return Math.max(1, d.dy);
+                            })
+                            .style("stroke", function (d) {
+                                return color(d.source.name.replace(/_.*/, ""));
+                            })
+                            .style("stroke-opacity", function (d) {
+                                   if(cohort == "ALL"){
+                                        var extract ="";
+                                        
+                                        if(filteredlinks[d.id-1] != undefined){
+                                            extract = filteredlinks[d.id-1].target.name.substring(filteredlinks[d.id-1].target.name.indexOf("_")+1);
+                                          //  console.log(extract);
+                                        }   
+                                        
+                                        if(extract == "S6" && d.source.name.substring(d.source.name.indexOf("_")+1) == "F1"){
+                                            opacityflag = opacityflag + 0.2;
+                                          //   console.log(opacityflag);
+                                          cohortid[cohortidindex] = d.id;
+                                          cohortidindex++;
+                                          //console.log(cohortid);
+                                        }   
+                                        return opacityflag;
+                                   }
+                                   return 0.2; 
+                                })
+                                        
+                            .sort(function (a, b) {
+                                return b.dy - a.dy;
+                            })
+                            .on("click", function(d){
+                                console.log(d);
+                                sourcename = d.source.name.replace(/_.*/, "");
+                                targetname = d.target.name.replace(/_.*/, "");
+                                link.style("stroke-opacity", function (x) {
+                                    if(x.source.name.replace(/_.*/, "") == sourcename && x.target.name.replace(/_.*/, "") == targetname)
+                                        return 1.0;
+                                    else
+                                        return 0.1;
+                                });    
+                            })
+                            .on("dblclick", function(){
+                                  link.style("stroke-opacity", function () {
+                                    return 0.2;
+                                   });      
+                            });
+
+// add the link titles
+                    link.append("title")
+                            .text(function (d) {
+                               // console.log(d);
+                                 var sindex = d.source.name.indexOf("_");
+                                var tindex = d.target.name.indexOf("_");
+                                var sname = d.source.name.substring(0, sindex);
+                                var tname = d.target.name.substring(0, tindex);
+                                if(cohort == "ALL"){
+                                       
+                                      if(d.id >= 0 && d.id < cohortid[0]){    
+                                        cohortindex = 0;
+                                      }
+                                      else if(d.id >= cohortid[0] && d.id < cohortid[1]){
+                                          cohortindex = 1;
+                                      }
+                                      else if(d.id >= cohortid[1] && d.id < cohortid[2]){
+                                          cohortindex = 2;
+                                      }
+                                      else if(d.id >= cohortid[2] && d.id < cohortid[3]){
+                                          cohortindex = 3;
+                                      }else {
+                                          cohortindex = 4;
+                                      }
+                                      return sname + " -> " +
+                                        tname + "\n" + format(d.value) + cohortyear[cohortindex];
+                                   }                        
+                                return sname + " -> " +
+                                        tname + "\n" + format(d.value);
+                            });
+
+// add in the nodes
+                    var node = svg.append("g").selectAll(".node")
+                            .data(graph.nodes)
+                            .enter().append("g")
+                            .attr("class", "node")
+                            .attr("transform", function (d) {
+                                return "translate(" + d.x + "," + d.y + ")";
+                            })
+                            .call(d3.behavior.drag()
+                                    .origin(function (d) {
+                                        return d;
+                                    })
+                                    .on("dragstart", function () {
+                                        this.parentNode.appendChild(this);
+                                    })
+
+                                    .on("drag", dragmove))
+                     .on("click", highlight_node_links);
+// add the rectangles for the nodes
+                    node.append("rect")
+                            .attr("height", function (d) {
+                                return d.dy;
+                            })
+                            .attr("width", sankey.nodeWidth())
+                            .style("fill", function (d) {
+                                return d.color = color(d.name.replace(/_.*/, ""));
+                            })
+                            .style("stroke", function (d) {
+                                console.log(color("GRAD"));
+                                return d3.rgb(d.color).darker(2);
+                            })
+                            .append("title")
+                            .text(function (d) {
+                                var index = d.name.indexOf("_");
+                                //return d.name;
+                                 return d.name.substring(0, index) + "\n" + format(d.value);
+                            });
+
+// add in the title for the nodes
+                    node.append("text")
+                            .attr("x", -6)
+                            .attr("y", function (d) {
+                                return d.dy / 2;
+                            })
+                            .attr("dy", ".35em")
+                            .attr("text-anchor", "end")
+                            .attr("transform", null)
+                            .text(function (d) {
+                                var index = d.name.indexOf("_");
+                                return d.name.substring(0, index);
+                                //  return d.name;
+                            })
+                            .filter(function (d) {
+                                return d.x < width / 2;
+                            })
+                            .attr("x", 6 + sankey.nodeWidth())
+                            .attr("text-anchor", "start")
+
+ 
+// the function for moving the nodes
+                    function dragmove(d) {
+                        d3.select(this).attr("transform",
+                                "translate(" + (
+                                        d.x = Math.max(0, Math.min(width - d.dx, d3.event.x))
+                                        )
+                                + "," + (
+                                        d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))
+                                        ) + ")");
+                        sankey.relayout();
+                        link.attr("d", path);
+                    }
+                    
+        }
+        function highlight_node_links(node,i){
+                       // alert("called");
+                         var remainingNodes=[],
+                         nextNodes=[];
+
+                         var stroke_opacity = 0;
+                         console.log(d3.select(this));
+                         if( d3.select(this).attr("data-clicked") == "1" ){
+                             d3.select(this).attr("data-clicked","0");
+                             stroke_opacity = 0.1;
+                         }else{
+                              d3.select(this).attr("data-clicked","1");
+                              stroke_opacity = 1.0;
+                         }
+
+                         var traverse = [{
+                              linkType : "sourceLinks",
+                              nodeType : "target"
+                         },{
+                              linkType : "targetLinks",
+                              nodeType : "source"
+                        }];
+
+                        traverse.forEach(function(step){
+                        node[step.linkType].forEach(function(link) {
+                        remainingNodes.push(link[step.nodeType]);
+                        highlight_link(link.id, stroke_opacity);
+                    });
+
+                    /* while (remainingNodes.length) {
+                      nextNodes = [];
+                      remainingNodes.forEach(function(node) {
+                      node[step.linkType].forEach(function(link) {
+                      nextNodes.push(link[step.nodeType]);
+                      highlight_link(link.id, stroke_opacity);
+                     });
+                 });
+                 remainingNodes = nextNodes;
+                }*/
+                });
+               // alert("over");
+            }
+
+                function highlight_link(id,opacity){
+                       d3.select("#link-"+id).style("stroke-opacity", opacity);
+                }
+                
+                function highlight_paths(link){
+                    alert("path");
+                    var stroke_opacity = 0;
+                         console.log(d3.select(this).textContent);
+                         if( d3.select(this).attr("data-clicked") == "1" ){
+                             d3.select(this).attr("data-clicked","0");
+                             stroke_opacity = 0.1;
+                         }else{
+                              d3.select(this).attr("data-clicked","1");
+                              stroke_opacity = 1.0;
+                         }
+                   /*  link.forEach(function(d){
+                         if(d.source.name == )
+                     });*/
+                        
+                }
+                 
+
+            </script>
+        </p>
+        <br>
+        <br>
+        <div id = "legend">
+        <table>
+            <tr>
+                <td style="text-align: right;"> <div style="width:15px;height:15px;background-color:#ff7f0e;"> <!-- BIZ--></div></td>
+                <td> <span>BIZ : College of Business</span> </td>
+                <td style="text-align: right;"><div style="width:15px;height:15px;background-color:#ff9896;"></div>  <!--SCI--> </td>
+                <td> <span>SCI : College of Sciences</span> </td>
+                <td style="text-align: right;"><div style="width:15px;height:15px;background-color:#ffbb78;"> </div>  <!-- ENG--> </td>
+                <td ><span>ENG : College of Engineering</span></td>
+                <td style="text-align: right;"><div style="width:15px;height:15px;background-color:#2ca02c;"></div>  <!-- IC--> </td>
+            <td><span>IC : Inter College </span></td>
+            <td> <div style="width:15px;height:15px;background-color:#1f77b4;"></div>   <!-- ALS --> </td>
+            <td><span>ALS : Agriculture and life Sciences</span></td>
+        </tr>
+        <tr>
+            
+            
+            <td style="text-align: right;"><div style="width:15px;height:15px;background-color:#aec7e8;"></div>   <!-- AUS--> </td>
+            <td><span>AUS : Architecture and Urban Studies</span></td>
+             <td style="text-align: right;"> <div style="width:15px;height:15px;background-color:#98df8a;"></div>    <!-- LAHS--> </td>
+            <td><span>LAHS : Liberal Arts and Human Sciences </span></td>
+            <td style="text-align: right;"><div style="width:15px;height:15px;background-color:#d62728;"></div>    <!-- NRE--> </td>
+            <td><span>NRE : Natural Resources and Environment</span></td>
+            <td style="text-align: right;"> <div style="width:15px;height:15px;background-color: #9467bd;"></div>     <!-- NE--> </td>
+                <td><span>NE : Not Enrolled</span></td>
+            <td style="text-align: right;"> <div style="width:15px;height:15px;background-color: #c5b0d5;"></div>    <!--GRAD--> </td>
+            <td><span>GRAD : Graduated</span></td>
+        </table>
+       </div>
+      
+        
+           
+    </body> 
+</html>
